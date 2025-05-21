@@ -5,6 +5,7 @@
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 
+import Replicate from 'replicate';
 const SketchToRenderInputSchema = z.object({
   sketchDataUri: z
     .string()
@@ -49,22 +50,23 @@ const sketchToRenderFlow = ai.defineFlow(
     outputSchema: SketchToRenderOutputSchema,
   },
   async input => {
-    const {media} = await ai.generate({
-      // IMPORTANT: ONLY the googleai/gemini-2.0-flash-exp model is able to generate images. You MUST use exactly this model to generate images.
-      model: 'googleai/gemini-2.0-flash-exp',
+    const replicate = new Replicate();
 
-      prompt: [
-        {media: {url: input.sketchDataUri}},
-        {
-          text: `Generate a realistic rendered image from this sketch, with aspect ratio ${input.aspectRatio} and output size ${input.outputSize}.`,
-        },
-      ],
+    const replicateInput = {
+      image: input.sketchDataUri,
+      scale: 2,
+      prompt: "a photo of interior of a home, sofa, carpet, realistic,4k", // You might want to make this dynamic based on user input later
+      cn_lineart_strength: 1,
+    };
 
-      config: {
-        responseModalities: ['TEXT', 'IMAGE'], // MUST provide both TEXT and IMAGE, IMAGE only won't work
-      },
-    });
+    try {
+      const output = await replicate.run("helios-infotech/sketch_to_image:feb7325e48612a443356bff3d0e03af21a42570f87bee6e8ea4f275f2bd3e6f9", { input: replicateInput });
 
-    return {renderDataUri: media.url!};
+      // Assuming the output is a single string which is the image URL
+      return { renderDataUri: output as string };
+    } catch (error) {
+      console.error("Error running Replicate model:", error);
+      throw new Error("Failed to generate render from sketch.");
+    }
   }
 );

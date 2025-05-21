@@ -13,6 +13,7 @@
 
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
+import Replicate from 'replicate';
 
 const TextToRenderInputSchema = z.object({
   textDescription: z
@@ -62,14 +63,24 @@ const textToRenderFlow = ai.defineFlow(
     outputSchema: TextToRenderOutputSchema,
   },
   async input => {
-    const {media} = await ai.generate({
-      model: 'googleai/gemini-2.0-flash-exp',
-      prompt: input.textDescription,
-      config: {
-        responseModalities: ['TEXT', 'IMAGE'],
-      },
+    const replicate = new Replicate({
+      // The API token is automatically picked up from the REPLICATE_API_TOKEN environment variable
+      // configured in src/ai/genkit.ts
     });
 
-    return {imageUrl: media.url!};
+    const replicateInput = {
+      prompt: input.textDescription,
+      num_outputs: 1, // We only need one image for this flow
+      aspect_ratio: input.aspectRatio || "16:9", // Use provided aspect ratio or default
+      // Assuming default values for guidance_scale and output_quality as provided
+      guidance_scale: 3.5,
+      output_quality: 100,
+      // Include architectural style if provided
+      ...(input.architecturalStyle && { architectural_style: input.architecturalStyle }),
+    };
+
+    const output = await replicate.run("davisbrown/designer-architecture:0d6f0893b05f14500ce03e45f54290cbffb907d14db49699f2823d0fd35def46", { input: replicateInput }) as string[];
+
+    return { imageUrl: output[0] }; // Assuming the output is an array of URLs
   }
 );
