@@ -1,6 +1,6 @@
 import {genkit} from 'genkit';
 import {googleAI} from '@genkit-ai/googleai';
-import {replicate} from \'@genkit-ai/replicate\';
+import {replicate} from '@genkit-ai/replicate';
 
 export const ai = genkit({
   plugins: [
