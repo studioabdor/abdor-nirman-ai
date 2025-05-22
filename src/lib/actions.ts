@@ -3,7 +3,6 @@
 import { sketchToRender, type SketchToRenderInput, type SketchToRenderOutput } from "@/ai/flows/sketch-to-render";
 import { moodboardRender, type MoodboardRenderInput, type MoodboardRenderOutput } from "@/ai/flows/moodboard-render";
 import { textToRender, type TextToRenderInput, type TextToRenderOutput } from "@/ai/flows/text-to-render";
-import { suggestStyle, type StyleSuggestionInput, type StyleSuggestionOutput } from "@/ai/flows/style-suggestion";
 
 export async function handleSketchToRender(input: SketchToRenderInput): Promise<SketchToRenderOutput> {
   try {
@@ -44,18 +43,5 @@ export async function handleTextToRender(input: TextToRenderInput): Promise<Text
     console.error("Error in handleTextToRender:", error);
     const errorMessage = error instanceof Error ? error.message : "An unknown error occurred during text to image generation.";
     throw new Error(`Text to image generation failed: ${errorMessage}`);
-  }
-}
-
-export async function handleStyleSuggestion(input: StyleSuggestionInput): Promise<StyleSuggestionOutput> {
-  try {
-    if (!input.currentInput || !input.pastProjects) {
-        throw new Error("Missing required fields for style suggestion.");
-    }
-    return await suggestStyle(input);
-  } catch (error) {
-    console.error("Error in handleStyleSuggestion:", error);
-    const errorMessage = error instanceof Error ? error.message : "An unknown error occurred while suggesting styles.";
-    throw new Error(`Style suggestion failed: ${errorMessage}`);
   }
 }
