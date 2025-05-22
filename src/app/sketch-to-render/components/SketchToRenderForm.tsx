@@ -20,17 +20,82 @@ import { addGeneratedImage } from "@/lib/firestoreService";
 // For now, using a simple text loading indicator.
 // import LoadingSpinner from "@/components/shared/LoadingSpinner"; // Original comment
 import LoadingSpinner from "@/components/shared/LoadingSpinner"; // Correctly import the shared component
+import React, { useState, useEffect } from "react"; // Ensure useEffect is imported
+
+// --- Define Size Options Data Structure ---
+const aspectRatioOptions = [
+  { value: "16:9", label: "16:9 (Widescreen)" },
+  { value: "1:1", label: "1:1 (Square)" },
+  { value: "9:16", label: "9:16 (Portrait)" },
+  { value: "4:3", label: "4:3 (Standard)" },
+  { value: "3:4", label: "3:4 (Tall)" },
+];
+
+const outputSizesByAspect: Record<string, Array<{ label: string, width: number, height: number }>> = {
+  "16:9": [
+    { label: "1024x576", width: 1024, height: 576 },
+    { label: "1280x720 (HD)", width: 1280, height: 720 },
+    { label: "1920x1080 (Full HD)", width: 1920, height: 1080 },
+    { label: "2048x1152 (2K)", width: 2048, height: 1152},
+  ],
+  "1:1": [
+    { label: "1024x1024", width: 1024, height: 1024 },
+    { label: "512x512", width: 512, height: 512 },
+    { label: "2048x2048 (2K)", width: 2048, height: 2048},
+  ],
+  "9:16": [
+    { label: "576x1024", width: 576, height: 1024 },
+    { label: "720x1280 (HD Portrait)", width: 720, height: 1280 },
+    { label: "1080x1920 (Full HD Portrait)", width: 1080, height: 1920 },
+  ],
+  "4:3": [
+    { label: "1024x768", width: 1024, height: 768 },
+    { label: "800x600", width: 800, height: 600 },
+  ],
+  "3:4": [
+    { label: "768x1024", width: 768, height: 1024 },
+    { label: "600x800", width: 600, height: 800 },
+  ],
+};
+// --- End Size Options Data Structure ---
 
 
 const SketchToRenderForm: React.FC = () => {
   const [sketchFile, setSketchFile] = useState<File | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [sketchPreviewDataUri, setSketchPreviewDataUri] = useState<string | null>(null); // Kept for potential UI preview if needed, though FileUploader handles its own.
-  const [aspectRatio, setAspectRatio] = useState<string>("16:9");
-  const [outputSize, setOutputSize] = useState<string>("1024x576"); // Default to a 16:9 size
+  const [sketchPreviewDataUri, setSketchPreviewDataUri] = useState<string | null>(null);
+
+  // --- Updated State Variables ---
+  const defaultAspectRatio = aspectRatioOptions[0].value; // "16:9"
+  const defaultSizesForAspectRatio = outputSizesByAspect[defaultAspectRatio];
+  const defaultOutputSizeString = defaultSizesForAspectRatio[0].label; // e.g., "1024x576"
+
+  const [aspectRatio, setAspectRatio] = useState<string>(defaultAspectRatio);
+  const [availableOutputSizes, setAvailableOutputSizes] = useState(defaultSizesForAspectRatio);
+  const [selectedOutputSize, setSelectedOutputSize] = useState<string>(defaultOutputSizeString); // Stores the label string like "1024x576"
+  // --- End Updated State Variables ---
+  
   const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+
+  // --- useEffect for Dynamic Updates ---
+  useEffect(() => {
+    const newAvailableSizes = outputSizesByAspect[aspectRatio];
+    setAvailableOutputSizes(newAvailableSizes);
+    if (newAvailableSizes.length > 0) {
+      // Check if the current selectedOutputSize is valid for the new aspect ratio
+      const currentSelectionIsValid = newAvailableSizes.some(size => size.label === selectedOutputSize);
+      if (!currentSelectionIsValid) {
+        setSelectedOutputSize(newAvailableSizes[0].label); // Set to the first available size
+      }
+      // If it is valid, keep the current selection, unless it's preferred to always reset.
+      // For now, only reset if invalid.
+    } else {
+      setSelectedOutputSize(""); // No sizes available
+    }
+  }, [aspectRatio, selectedOutputSize]); // Added selectedOutputSize to dependencies to re-validate if it changes externally
+  // --- End useEffect for Dynamic Updates ---
 
   const handleFileUpdate = (file: File | null, dataUri: string | null) => {
     setSketchFile(file);
@@ -65,19 +130,26 @@ const SketchToRenderForm: React.FC = () => {
 
       // 2. Call AI Flow (Action)
       //    This section assumes `handleSketchToRender` in `src/lib/actions.ts`
-      //    has been updated to accept `sketchUrl` instead of `sketchDataUri`.
-      //    And that it can be called client-side, or is wrapped appropriately.
+      //    has been updated to accept `sketchUrl`, `width`, and `height`.
+      const selectedSizeObject = availableOutputSizes.find(size => size.label === selectedOutputSize);
+      if (!selectedSizeObject) {
+        throw new Error("Selected output size is not valid.");
+      }
+
+      const { width, height } = selectedSizeObject;
+      
       const aiInput = {
         sketchUrl: uploadedSketchUrl,
         aspectRatio,
-        outputSize,
+        width,
+        height,
       };
       console.log("Calling AI flow with input:", aiInput);
 
       // MOCK AI RESULT (replace with actual call to handleSketchToRender)
       // const aiResult = await handleSketchToRender(aiInput);
       await new Promise(resolve => setTimeout(resolve, 2500)); // Simulate AI processing time
-      const mockGeneratedImage = `https://picsum.photos/seed/${Math.random()}/${outputSize.split('x')[0]}/${outputSize.split('x')[1]}`;
+      const mockGeneratedImage = `https://picsum.photos/seed/${Math.random()}/${width}/${height}`;
       const aiResult = { imageUrl: mockGeneratedImage, error: null }; // Mock success
       // const aiResult = { imageUrl: null, error: "Mock AI processing failed." }; // Mock failure
       // MOCK END
@@ -92,12 +164,14 @@ const SketchToRenderForm: React.FC = () => {
       try {
         await addGeneratedImage(userId, {
           type: "sketch-to-image",
-          originalImageUrl: uploadedSketchUrl, // URL of the uploaded sketch
-          generatedImageUrl: aiGeneratedImageUrl, // URL of the AI-generated image
+          originalImageUrl: uploadedSketchUrl, 
+          generatedImageUrl: aiGeneratedImageUrl, 
           parameters: {
             aspectRatio,
-            outputSize,
-            originalSketchPath: uploadedSketchPath, // Path in storage for reference/cleanup
+            width, // Save numerical width
+            height, // Save numerical height
+            outputSizeLabel: selectedOutputSize, // Optionally save the label for display
+            originalSketchPath: uploadedSketchPath, 
           },
         });
       } catch (firestoreError) {
@@ -128,8 +202,10 @@ const SketchToRenderForm: React.FC = () => {
     }
   };
 
-  // Dynamically parse width and height for the Image component
-  const [imgWidth, imgHeight] = outputSize.split("x").map(Number);
+  // Dynamically parse width and height for the Image component from selectedOutputSize
+  const currentOutputDimensions = availableOutputSizes.find(s => s.label === selectedOutputSize) || { width: 1024, height: 576};
+  const imgWidth = currentOutputDimensions.width;
+  const imgHeight = currentOutputDimensions.height;
 
   return (
     <div className="max-w-2xl mx-auto p-4 space-y-6">
@@ -150,36 +226,33 @@ const SketchToRenderForm: React.FC = () => {
                 <SelectValue placeholder="Select aspect ratio" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="16:9">16:9 (Widescreen)</SelectItem>
-                <SelectItem value="1:1">1:1 (Square)</SelectItem>
-                <SelectItem value="9:16">9:16 (Portrait)</SelectItem>
-                <SelectItem value="4:3">4:3 (Standard)</SelectItem>
-                <SelectItem value="3:4">3:4 (Tall)</SelectItem>
+                {aspectRatioOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
 
           <div>
             <Label htmlFor="output-size" className="block text-sm font-medium mb-1">Output Size:</Label>
-            <Select value={outputSize} onValueChange={setOutputSize} disabled={isLoading}>
+            <Select value={selectedOutputSize} onValueChange={setSelectedOutputSize} disabled={isLoading || availableOutputSizes.length === 0}>
               <SelectTrigger id="output-size">
                 <SelectValue placeholder="Select output size" />
               </SelectTrigger>
               <SelectContent>
-                {/* These should ideally be filtered/updated based on aspect ratio */}
-                <SelectItem value="1024x576">1024x576 (16:9)</SelectItem>
-                <SelectItem value="1024x1024">1024x1024 (1:1)</SelectItem>
-                <SelectItem value="576x1024">576x1024 (9:16)</SelectItem>
-                <SelectItem value="1024x768">1024x768 (4:3)</SelectItem>
-                <SelectItem value="768x1024">768x1024 (3:4)</SelectItem>
-                <SelectItem value="2048x1152">2048x1152 (16:9 HD)</SelectItem>
-                <SelectItem value="2048x2048">2048x2048 (1:1 HD)</SelectItem>
+                {availableOutputSizes.map((size) => (
+                  <SelectItem key={size.label} value={size.label}>
+                    {size.label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
         </div>
 
-        <Button type="submit" className="w-full" disabled={isLoading || !sketchFile}>
+        <Button type="submit" className="w-full" disabled={isLoading || !sketchFile || !selectedOutputSize}>
           {isLoading ? "Generating Your Image..." : "Render Sketch"}
         </Button>
       </form>

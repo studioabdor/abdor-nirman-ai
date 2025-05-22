@@ -17,9 +17,42 @@ import { uploadFile, deleteFileByPath } from "@/lib/storageService";
 import { addMoodboardProject } from "@/lib/firestoreService";
 import { handleMoodboardRender } from "@/lib/actions"; // Assumed to be updated for URLs
 import LoadingSpinner from "@/components/shared/LoadingSpinner"; // Import the shared component
+import React, { useState, useEffect } from "react"; // Ensure useEffect is imported
 
-// Placeholder for LoadingSpinner - REMOVED
-// const LoadingSpinner: React.FC = () => <div className="flex justify-center items-center"><p className="text-lg">Generating your moodboard...</p></div>;
+// --- Define Size Options Data Structure (consistent with other forms) ---
+const aspectRatioOptions = [
+  { value: "16:9", label: "16:9 (Widescreen)" },
+  { value: "1:1", label: "1:1 (Square)" },
+  { value: "9:16", label: "9:16 (Portrait)" },
+  { value: "4:3", label: "4:3 (Standard)" },
+  // Add other ratios if relevant for moodboards, e.g., 3:2, 3:4
+  // For now, keeping it concise as per original options in this form.
+];
+
+const outputSizesByAspect: Record<string, Array<{ label: string, width: number, height: number }>> = {
+  "16:9": [
+    { label: "1024x576", width: 1024, height: 576 },
+    { label: "1280x720 (HD)", width: 1280, height: 720 },
+    { label: "1920x1080 (Full HD)", width: 1920, height: 1080 },
+    { label: "2048x1152 (2K)", width: 2048, height: 1152 },
+  ],
+  "1:1": [
+    { label: "1024x1024", width: 1024, height: 1024 },
+    { label: "512x512", width: 512, height: 512 },
+    { label: "2048x2048 (2K)", width: 2048, height: 2048 },
+  ],
+  "9:16": [
+    { label: "576x1024", width: 576, height: 1024 },
+    { label: "720x1280 (HD Portrait)", width: 720, height: 1280 },
+    { label: "1080x1920 (Full HD Portrait)", width: 1080, height: 1920 },
+  ],
+  "4:3": [
+    { label: "1024x768", width: 1024, height: 768 },
+    { label: "800x600", width: 800, height: 600 },
+  ],
+};
+// --- End Size Options Data Structure ---
+
 
 const architecturalStyleOptions = [
   "Modern", "Minimalist", "Brutalist", "Classical", "Art Deco", 
@@ -35,12 +68,36 @@ const MoodboardRenderForm: React.FC = () => {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [image2PreviewDataUri, setImage2PreviewDataUri] = useState<string | null>(null);
   const [projectName, setProjectName] = useState<string>("");
-  const [aspectRatio, setAspectRatio] = useState<string>("16:9");
-  const [outputSize, setOutputSize] = useState<string>("1024x576");
+  
+  // --- Updated State Variables for Aspect Ratio and Output Size ---
+  const defaultAspectRatio = aspectRatioOptions[0].value; // "16:9"
+  const defaultSizesForAspectRatio = outputSizesByAspect[defaultAspectRatio];
+  const defaultOutputSizeString = defaultSizesForAspectRatio[0].label; // e.g., "1024x576"
+
+  const [aspectRatio, setAspectRatio] = useState<string>(defaultAspectRatio);
+  const [availableOutputSizes, setAvailableOutputSizes] = useState(defaultSizesForAspectRatio);
+  const [selectedOutputSize, setSelectedOutputSize] = useState<string>(defaultOutputSizeString);
+  // --- End Updated State Variables ---
+  
   const [architecturalStyle, setArchitecturalStyle] = useState<string>(architecturalStyleOptions[0]);
   const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+
+  // --- useEffect for Dynamic Updates ---
+  useEffect(() => {
+    const newAvailableSizes = outputSizesByAspect[aspectRatio];
+    setAvailableOutputSizes(newAvailableSizes);
+    if (newAvailableSizes && newAvailableSizes.length > 0) {
+      const currentSelectionIsValid = newAvailableSizes.some(size => size.label === selectedOutputSize);
+      if (!currentSelectionIsValid) {
+        setSelectedOutputSize(newAvailableSizes[0].label);
+      }
+    } else {
+      setSelectedOutputSize("");
+    }
+  }, [aspectRatio, selectedOutputSize]);
+  // --- End useEffect for Dynamic Updates ---
 
   const handleImage1Upload = (file: File | null, dataUri: string | null) => {
     setImage1File(file);
@@ -106,12 +163,21 @@ const MoodboardRenderForm: React.FC = () => {
       
       // 3. Call AI Flow (Action)
       // This assumes `handleMoodboardRender` in `src/lib/actions.ts`
-      // has been updated to accept `image1Url` and `image2Url`.
+      // has been updated to accept `image1Url`, `image2Url`, `width`, `height`.
+      const selectedSizeObject = availableOutputSizes.find(size => size.label === selectedOutputSize);
+      if (!selectedSizeObject) {
+        setError("Please select a valid output size.");
+        setIsLoading(false); // Ensure loading is stopped
+        return; // Return early as we cannot proceed
+      }
+      const { width, height } = selectedSizeObject;
+      
       const aiInput = {
-        image1Url: uploadedImage1Url, // Pass URL
-        image2Url: uploadedImage2Url, // Pass URL
+        image1Url: uploadedImage1Url, 
+        image2Url: uploadedImage2Url, 
         aspectRatio,
-        outputSize,
+        width, // Pass numerical width
+        height, // Pass numerical height
         architecturalStyle,
       };
       console.log("Calling AI flow (handleMoodboardRender) with input:", aiInput);
@@ -119,7 +185,7 @@ const MoodboardRenderForm: React.FC = () => {
       const aiResult = await handleMoodboardRender(aiInput);
       // MOCK AI RESULT - Remove this block when `handleMoodboardRender` is fully implemented
       // await new Promise(resolve => setTimeout(resolve, 3000));
-      // const mockGeneratedImage = `https://picsum.photos/seed/${Math.random()}/${outputSize.split('x')[0]}/${outputSize.split('x')[1]}?random&moodboard=${encodeURIComponent(projectName)}`;
+      // const mockGeneratedImage = `https://picsum.photos/seed/${Math.random()}/${width}/${height}?random&moodboard=${encodeURIComponent(projectName)}`;
       // const aiResult = { imageUrl: mockGeneratedImage, error: null }; // Mock success
       // const aiResult = { imageUrl: null, error: "Mock AI moodboard processing failed." }; // Mock failure for testing
       // MOCK END
@@ -137,9 +203,11 @@ const MoodboardRenderForm: React.FC = () => {
           generatedImageUrl: aiGeneratedImageUrl,
           parameters: {
             aspectRatio,
-            outputSize,
+            width, // Save numerical width
+            height, // Save numerical height
+            outputSizeLabel: selectedOutputSize, // Optionally save the label
             architecturalStyle,
-            inputImage1Path: uploadedImage1Path, // Store paths for reference/cleanup
+            inputImage1Path: uploadedImage1Path, 
             inputImage2Path: uploadedImage2Path,
           },
         });
@@ -171,7 +239,9 @@ const MoodboardRenderForm: React.FC = () => {
   };
 
   // Dynamically parse width and height for the Image component
-  const [imgWidth, imgHeight] = outputSize.split("x").map(Number);
+  const currentOutputDimensions = availableOutputSizes.find(s => s.label === selectedOutputSize) || { width: 1024, height: 576 };
+  const imgWidth = currentOutputDimensions.width;
+  const imgHeight = currentOutputDimensions.height;
 
   return (
     <div className="max-w-3xl mx-auto p-4 space-y-8">
@@ -223,23 +293,28 @@ const MoodboardRenderForm: React.FC = () => {
             <Select value={aspectRatio} onValueChange={setAspectRatio} disabled={isLoading}>
               <SelectTrigger id="aspect-ratio"><SelectValue placeholder="Select ratio" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="16:9">16:9 (Widescreen)</SelectItem>
-                <SelectItem value="1:1">1:1 (Square)</SelectItem>
-                <SelectItem value="9:16">9:16 (Portrait)</SelectItem>
-                <SelectItem value="4:3">4:3 (Standard)</SelectItem>
+                {aspectRatioOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
           <div>
             <Label htmlFor="output-size" className="block text-sm font-medium mb-1">Output Size</Label>
-            <Select value={outputSize} onValueChange={setOutputSize} disabled={isLoading}>
+            <Select 
+              value={selectedOutputSize} 
+              onValueChange={setSelectedOutputSize} 
+              disabled={isLoading || (availableOutputSizes && availableOutputSizes.length === 0)}
+            >
               <SelectTrigger id="output-size"><SelectValue placeholder="Select size" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="1024x576">1024x576 (16:9)</SelectItem>
-                <SelectItem value="1024x1024">1024x1024 (1:1)</SelectItem>
-                <SelectItem value="576x1024">576x1024 (9:16)</SelectItem>
-                <SelectItem value="1024x768">1024x768 (4:3)</SelectItem>
-                <SelectItem value="2048x1152">2048x1152 (16:9 HD)</SelectItem>
+                {availableOutputSizes && availableOutputSizes.map((size) => (
+                  <SelectItem key={size.label} value={size.label}>
+                    {size.label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -248,7 +323,7 @@ const MoodboardRenderForm: React.FC = () => {
         <Button 
           type="submit" 
           className="w-full py-3 text-lg" 
-          disabled={isLoading || !image1File || !image2File || !projectName.trim()}
+          disabled={isLoading || !image1File || !image2File || !projectName.trim() || !selectedOutputSize}
         >
           {isLoading ? "Generating Moodboard..." : "Generate Moodboard"}
         </Button>

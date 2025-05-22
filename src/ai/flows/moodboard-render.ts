@@ -22,8 +22,9 @@ const MoodboardRenderInputSchema = z.object({
     .string()
     .url()
     .describe("The public URL of the second image to merge."),
-  aspectRatio: z.string().optional().describe('The aspect ratio of the output image.'),
-  outputSize: z.string().optional().describe('The desired output size of the image.'),
+  aspectRatio: z.string().optional().describe('The aspect ratio of the output image (e.g., "16:9").'),
+  width: z.number().int().positive().optional().describe("The desired width of the merged image in pixels."),
+  height: z.number().int().positive().optional().describe("The desired height of the merged image in pixels."),
   architecturalStyle: z.string().optional().describe('The architectural style to apply to the merged image.'),
 });
 
@@ -48,13 +49,14 @@ const prompt = ai.definePrompt({
   output: {schema: MoodboardRenderOutputSchema},
   prompt: `You are an AI that merges two images into a new realistic image, considering architectural styles and combinations.
 
-  Merge the two images provided, applying the specified architectural style, aspect ratio, and output size.
+  Merge the two images provided, applying the specified architectural style, aspect ratio, width, and height.
 
   Image 1: {{media url=image1Url}}
   Image 2: {{media url=image2Url}}
   Architectural Style: {{{architecturalStyle}}}
   Aspect Ratio: {{{aspectRatio}}}
-  Output Size: {{{outputSize}}}
+  Width: {{{width}}}
+  Height: {{{height}}}
 
   Return the merged image as a public URL.
   `,
@@ -66,20 +68,45 @@ const moodboardRenderFlow = ai.defineFlow(
     inputSchema: MoodboardRenderInputSchema,
     outputSchema: MoodboardRenderOutputSchema,
   },
-  async input => {
-    // The prompt itself is expected to return a URL if the underlying model supports it.
-    // If the model used by `prompt(input)` (e.g., a specific Genkit model plugin)
-    // inherently outputs image URLs when provided with media URLs, this is fine.
-    // Otherwise, if it still produced a data URI, conversion would be needed here.
-    // For now, assuming the AI model connected to `prompt` handles this correctly
-    // and its output aligns with `MoodboardRenderOutputSchema` (i.e., returns an imageUrl).
-    const {output} = await prompt(input);
-    if (!output?.imageUrl) {
-      // This check is a bit redundant if the output schema is enforced by Genkit,
-      // but good for clarity. The actual validation against the schema is done by Genkit.
-      console.error("AI did not return an image URL for moodboard.", output);
-      throw new Error("AI did not return a valid image URL for the moodboard.");
+  async (input: MoodboardRenderInput) => {
+    const { image1Url, image2Url, aspectRatio, width, height, architecturalStyle } = input;
+
+    if (aspectRatio && width && height) {
+      const [arWidth, arHeight] = aspectRatio.split(':').map(Number);
+      if (Math.abs(width / height - arWidth / arHeight) > 0.01) {
+        throw new Error(
+          `The provided width (${width}) and height (${height}) do not match the aspect ratio (${aspectRatio}).`
+        );
+      }
     }
-    return output; // output is already { imageUrl: "..." }
+
+    // The current moodboardRenderFlow uses a Genkit prompt.
+    // The prompt is updated to include width and height.
+    // We assume the underlying model called by `ai.definePrompt` can interpret these
+    // parameters from the prompt context.
+    // If this flow were directly calling Replicate, we'd pass width/height to Replicate input.
+    // Since it's a generic prompt, we ensure the input to the prompt includes width and height.
+    
+    const promptInput = {
+        image1Url,
+        image2Url,
+        aspectRatio,
+        width, // Pass width to the prompt
+        height, // Pass height to the prompt
+        architecturalStyle,
+    };
+
+    try {
+        const { output } = await prompt(promptInput); // Pass validated and structured input
+        if (!output?.imageUrl) {
+            console.error("AI (moodboard prompt) did not return an image URL.", output);
+            throw new Error("AI (moodboard prompt) did not return a valid image URL.");
+        }
+        return output; // output is already { imageUrl: "..." }
+    } catch (error: any) {
+        console.error("Error in moodboardRenderFlow calling prompt:", error);
+        const errorMessage = error.message || "Failed to generate moodboard image via AI prompt.";
+        throw new Error(`Moodboard generation failed: ${errorMessage}`);
+    }
   }
 );

@@ -22,11 +22,9 @@ const TextToRenderInputSchema = z.object({
   aspectRatio: z
     .string()
     .optional()
-    .describe('The aspect ratio of the generated image (e.g., 16:9, 1:1).'),
-  outputSize: z
-    .string()
-    .optional()
-    .describe('The desired output size of the image (e.g., 1024x768).'),
+    .describe('The aspect ratio of the generated image (e.g., "16:9", "1:1").'),
+  width: z.number().int().positive().describe("The desired width of the generated image in pixels."),
+  height: z.number().int().positive().describe("The desired height of the generated image in pixels."),
   architecturalStyle: z
     .string()
     .optional()
@@ -52,7 +50,8 @@ const textToRenderPrompt = ai.definePrompt({
   prompt: `Generate an image based on the following description: {{{textDescription}}}.
 
   {% if aspectRatio %}Aspect Ratio: {{{aspectRatio}}}.{% endif %}
-  {% if outputSize %}Output Size: {{{outputSize}}}.{% endif %}
+  Width: {{{width}}}
+  Height: {{{height}}}
   {% if architecturalStyle %}Architectural Style: {{{architecturalStyle}}}.{% endif %}`,
 });
 
@@ -63,24 +62,56 @@ const textToRenderFlow = ai.defineFlow(
     outputSchema: TextToRenderOutputSchema,
   },
   async input => {
-    const replicate = new Replicate({
-      // The API token is automatically picked up from the REPLICATE_API_TOKEN environment variable
-      // configured in src/ai/genkit.ts
-    });
+    const { textDescription, aspectRatio, width, height, architecturalStyle } = input;
 
-    const replicateInput = {
-      prompt: input.textDescription,
-      num_outputs: 1, // We only need one image for this flow
-      aspect_ratio: input.aspectRatio || "16:9", // Use provided aspect ratio or default
-      // Assuming default values for guidance_scale and output_quality as provided
-      guidance_scale: 3.5,
-      output_quality: 100,
-      // Include architectural style if provided
-      ...(input.architecturalStyle && { architectural_style: input.architecturalStyle }),
+    if (aspectRatio) {
+      const [arWidth, arHeight] = aspectRatio.split(':').map(Number);
+      if (Math.abs(width / height - arWidth / arHeight) > 0.01) {
+        throw new Error(
+          `The provided width (${width}) and height (${height}) do not match the aspect ratio (${aspectRatio}).`
+        );
+      }
+    }
+
+    const replicate = new Replicate();
+
+    // Model ai-forever/kandinsky-2.2 accepts width and height directly.
+    // It's important that width and height are multiples of 64 for this model.
+    // This validation should ideally happen in the Zod schema or client-side,
+    // but a runtime check can be added here if necessary.
+    if (width % 64 !== 0 || height % 64 !== 0) {
+        console.warn(`Kandinsky-2.2 model prefers width and height to be multiples of 64. Received: ${width}x${height}`);
+        // Optionally, adjust to nearest multiple or throw error, depending on desired strictness.
+        // For now, we'll pass them as is, but the model might error or adjust them.
+    }
+
+    const replicateInput: any = {
+      prompt: architecturalStyle ? `${textDescription}, ${architecturalStyle} style` : textDescription,
+      num_outputs: 1,
+      width: width,
+      height: height,
+      // Other parameters for Kandinsky 2.2 if needed:
+      // guidance_scale: 4,
+      // h_upscale: 1, // upscale factor
+      // w_upscale: 1, // upscale factor
+      // num_inference_steps: 75,
     };
+    
+    // The model 'ai-forever/kandinsky-2.2' (version: 'ea1addaab376f4dc227f5368bbd8eff901820fd1cc14ed8cad63b29249e9d463')
+    // is a common version. Let's use it.
+    const modelIdentifier = "ai-forever/kandinsky-2.2:ea1addaab376f4dc227f5368bbd8eff901820fd1cc14ed8cad63b29249e9d463";
 
-    const output = await replicate.run("davisbrown/designer-architecture:0d6f0893b05f14500ce03e45f54290cbffb907d14db49699f2823d0fd35def46", { input: replicateInput }) as string[];
-
-    return { imageUrl: output[0] }; // Assuming the output is an array of URLs
+    try {
+        const output = await replicate.run(modelIdentifier, { input: replicateInput }) as string[];
+        if (!output || output.length === 0 || !output[0]) {
+            console.error("Replicate output was empty or invalid for text-to-render:", output);
+            throw new Error("AI model did not return a valid image URL.");
+        }
+        return { imageUrl: output[0] };
+    } catch (error: any) {
+        console.error("Error running Replicate Kandinsky model:", error);
+        const errorMessage = error.detail || error.message || "Failed to generate image from text via Replicate.";
+        throw new Error(`Text-to-image generation failed: ${errorMessage}`);
+    }
   }
 );

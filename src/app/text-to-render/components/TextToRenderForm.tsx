@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react"; // Ensure useEffect is imported
 import StyleSuggestionWidget from "@/app/style-suggestion/components/StyleSuggestionWidget";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -21,6 +21,48 @@ import { handleTextToRender } from "@/lib/actions"; // Assuming this is the corr
 // import LoadingSpinner from "@/components/shared/LoadingSpinner"; // Original comment
 import LoadingSpinner from "@/components/shared/LoadingSpinner"; // Correctly import the shared component
 
+// --- Define Size Options Data Structure (same as SketchToRenderForm) ---
+const aspectRatioOptions = [
+  { value: "16:9", label: "16:9 (Widescreen)" },
+  { value: "1:1", label: "1:1 (Square)" },
+  { value: "9:16", label: "9:16 (Portrait)" },
+  { value: "4:3", label: "4:3 (Standard)" },
+  { value: "3:2", label: "3:2 (Photography)" }, // Added 3:2 as it was in original options
+  { value: "3:4", label: "3:4 (Tall)" },
+];
+
+const outputSizesByAspect: Record<string, Array<{ label: string, width: number, height: number }>> = {
+  "16:9": [
+    { label: "1024x576", width: 1024, height: 576 },
+    { label: "1280x720 (HD)", width: 1280, height: 720 },
+    { label: "1920x1080 (Full HD)", width: 1920, height: 1080 },
+    { label: "2048x1152 (2K)", width: 2048, height: 1152 },
+  ],
+  "1:1": [
+    { label: "1024x1024", width: 1024, height: 1024 },
+    { label: "512x512", width: 512, height: 512 },
+    { label: "2048x2048 (2K)", width: 2048, height: 2048 },
+  ],
+  "9:16": [
+    { label: "576x1024", width: 576, height: 1024 },
+    { label: "720x1280 (HD Portrait)", width: 720, height: 1280 },
+    { label: "1080x1920 (Full HD Portrait)", width: 1080, height: 1920 },
+  ],
+  "4:3": [
+    { label: "1024x768", width: 1024, height: 768 },
+    { label: "800x600", width: 800, height: 600 },
+  ],
+   "3:2": [ // Added sizes for 3:2
+    { label: "1024x680", width: 1024, height: 680 },
+    { label: "1280x854", width: 1280, height: 854 },
+  ],
+  "3:4": [
+    { label: "768x1024", width: 768, height: 1024 },
+    { label: "600x800", width: 600, height: 800 },
+  ],
+};
+// --- End Size Options Data Structure ---
+
 const architecturalStyleOptions = [
   "Modern",
   "Minimalist",
@@ -36,12 +78,37 @@ const architecturalStyleOptions = [
 
 const TextToRenderForm: React.FC = () => {
   const [textDescription, setTextDescription] = useState<string>("");
-  const [aspectRatio, setAspectRatio] = useState<string>("16:9");
-  const [outputSize, setOutputSize] = useState<string>("1024x576"); // Default to a 16:9 size
+  
+  // --- Updated State Variables for Aspect Ratio and Output Size ---
+  const defaultAspectRatio = aspectRatioOptions[0].value; // "16:9"
+  const defaultSizesForAspectRatio = outputSizesByAspect[defaultAspectRatio];
+  const defaultOutputSizeString = defaultSizesForAspectRatio[0].label; // e.g., "1024x576"
+
+  const [aspectRatio, setAspectRatio] = useState<string>(defaultAspectRatio);
+  const [availableOutputSizes, setAvailableOutputSizes] = useState(defaultSizesForAspectRatio);
+  const [selectedOutputSize, setSelectedOutputSize] = useState<string>(defaultOutputSizeString);
+  // --- End Updated State Variables ---
+
   const [architecturalStyle, setArchitecturalStyle] = useState<string>(architecturalStyleOptions[0]);
   const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+
+  // --- useEffect for Dynamic Updates ---
+  useEffect(() => {
+    const newAvailableSizes = outputSizesByAspect[aspectRatio];
+    setAvailableOutputSizes(newAvailableSizes);
+    if (newAvailableSizes && newAvailableSizes.length > 0) {
+      // Check if the current selectedOutputSize is valid for the new aspect ratio
+      const currentSelectionIsValid = newAvailableSizes.some(size => size.label === selectedOutputSize);
+      if (!currentSelectionIsValid) {
+        setSelectedOutputSize(newAvailableSizes[0].label); // Set to the first available size
+      }
+    } else {
+      setSelectedOutputSize(""); // No sizes available
+    }
+  }, [aspectRatio, selectedOutputSize]); // selectedOutputSize in deps to re-validate if changed externally
+  // --- End useEffect for Dynamic Updates ---
 
   // --- Style Suggestion Integration ---
   const [showStyleAdvisor, setShowStyleAdvisor] = useState<boolean>(false);
@@ -70,13 +137,16 @@ const TextToRenderForm: React.FC = () => {
     }
     if (suggestion.parameters) {
       // Example: If AI suggests specific aspect ratio
-      if (suggestion.parameters.aspectRatio && typeof suggestion.parameters.aspectRatio === 'string') {
-        // Basic validation, could be more robust
-        if (["16:9", "1:1", "9:16", "4:3", "3:2"].includes(suggestion.parameters.aspectRatio)) {
-            setAspectRatio(suggestion.parameters.aspectRatio);
-        }
+      // Ensure aspectRatioOptions has the value before setting
+      if (suggestion.parameters.aspectRatio && 
+          typeof suggestion.parameters.aspectRatio === 'string' &&
+          aspectRatioOptions.some(opt => opt.value === suggestion.parameters.aspectRatio)) {
+        setAspectRatio(suggestion.parameters.aspectRatio);
       }
-      // Add more parameter handling as needed
+      // Add more parameter handling as needed for width/height if AI suggests specific pixel values
+      // For example, if AI returns parameters.width and parameters.height:
+      // We would need to find a matching label in outputSizesByAspect or handle custom sizes.
+      // This is more complex and for now, we'll stick to AR and let useEffect handle size selection.
     }
     setShowStyleAdvisor(false); // Close advisor after applying
     alert("Suggestion applied to form fields (style and/or description updated).");
@@ -98,14 +168,20 @@ const TextToRenderForm: React.FC = () => {
 
     const userId = "test-user-text-to-render"; // Placeholder for actual user ID
 
+    const selectedSizeObject = availableOutputSizes.find(size => size.label === selectedOutputSize);
+    if (!selectedSizeObject) {
+      setError("Please select a valid output size.");
+      setIsLoading(false);
+      return;
+    }
+    const { width, height } = selectedSizeObject;
+
     const aiInput = {
       textDescription,
       aspectRatio,
-      outputSize,
+      width, // Pass numerical width
+      height, // Pass numerical height
       architecturalStyle,
-      // The backend `handleTextToRender` action and the `textToRender` AI flow
-      // will be responsible for mapping these fields to the specific AI model's requirements.
-      // For example, `textDescription` might become `prompt`.
     };
 
     try {
@@ -114,7 +190,7 @@ const TextToRenderForm: React.FC = () => {
 
       // MOCK AI RESULT - Remove this block when `handleTextToRender` is fully implemented
       // await new Promise(resolve => setTimeout(resolve, 2500)); 
-      // const mockGeneratedImage = `https://picsum.photos/seed/${Math.random()}/${outputSize.split('x')[0]}/${outputSize.split('x')[1]}?random&description=${encodeURIComponent(textDescription)}`;
+      // const mockGeneratedImage = `https://picsum.photos/seed/${Math.random()}/${width}/${height}?random&description=${encodeURIComponent(textDescription)}`;
       // const aiResult = { imageUrl: mockGeneratedImage, error: null }; 
       // MOCK END
 
@@ -127,11 +203,13 @@ const TextToRenderForm: React.FC = () => {
       try {
         await addGeneratedImage(userId, {
           type: "text-to-image",
-          prompt: textDescription, // Save the original text description as prompt
+          prompt: textDescription, 
           generatedImageUrl: aiGeneratedImageUrl,
           parameters: {
             aspectRatio,
-            outputSize,
+            width, // Save numerical width
+            height, // Save numerical height
+            outputSizeLabel: selectedOutputSize, // Optionally save the label
             architecturalStyle,
           },
         });
@@ -154,7 +232,9 @@ const TextToRenderForm: React.FC = () => {
   };
 
   // Dynamically parse width and height for the Image component
-  const [imgWidth, imgHeight] = outputSize.split("x").map(Number);
+  const currentOutputDimensions = availableOutputSizes.find(s => s.label === selectedOutputSize) || { width: 1024, height: 576 };
+  const imgWidth = currentOutputDimensions.width;
+  const imgHeight = currentOutputDimensions.height;
 
   return (
     <div className="max-w-4xl mx-auto p-4 space-y-6"> {/* Increased max-width for potential widget */}
@@ -198,11 +278,11 @@ const TextToRenderForm: React.FC = () => {
                 <SelectValue placeholder="Select aspect ratio" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="16:9">16:9 (Widescreen)</SelectItem>
-                <SelectItem value="1:1">1:1 (Square)</SelectItem>
-                <SelectItem value="9:16">9:16 (Portrait)</SelectItem>
-                <SelectItem value="4:3">4:3 (Standard)</SelectItem>
-                <SelectItem value="3:2">3:2 (Photography)</SelectItem>
+                {aspectRatioOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -210,23 +290,25 @@ const TextToRenderForm: React.FC = () => {
         
         <div>
             <Label htmlFor="output-size" className="block text-sm font-medium mb-1">Output Size:</Label>
-            <Select value={outputSize} onValueChange={setOutputSize} disabled={isLoading}>
+            <Select 
+              value={selectedOutputSize} 
+              onValueChange={setSelectedOutputSize} 
+              disabled={isLoading || (availableOutputSizes && availableOutputSizes.length === 0)}
+            >
               <SelectTrigger id="output-size">
                 <SelectValue placeholder="Select output size" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="1024x576">1024x576 (16:9)</SelectItem>
-                <SelectItem value="1024x1024">1024x1024 (1:1)</SelectItem>
-                <SelectItem value="576x1024">576x1024 (9:16)</SelectItem>
-                <SelectItem value="1024x768">1024x768 (4:3)</SelectItem>
-                <SelectItem value="1024x680">1024x680 (3:2)</SelectItem>
-                <SelectItem value="2048x1152">2048x1152 (16:9 HD)</SelectItem>
-                <SelectItem value="2048x2048">2048x2048 (1:1 HD)</SelectItem>
+                {availableOutputSizes && availableOutputSizes.map((size) => (
+                  <SelectItem key={size.label} value={size.label}>
+                    {size.label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
 
-          <Button type="submit" className="w-full" disabled={isLoading || !textDescription.trim()}>
+          <Button type="submit" className="w-full" disabled={isLoading || !textDescription.trim() || !selectedOutputSize}>
             {isLoading ? "Generating Your Image..." : "Generate Image"}
           </Button>
         </form>

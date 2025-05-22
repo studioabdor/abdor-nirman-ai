@@ -9,8 +9,11 @@ import { enhanceDetailsFlow, type EnhanceDetailsInput, type EnhanceDetailsOutput
 export async function handleSketchToRender(input: SketchToRenderInput): Promise<SketchToRenderOutput> {
   try {
     // Validate or sanitize input if necessary
-    if (!input.sketchUrl || !input.aspectRatio || !input.outputSize) { // Changed sketchDataUri to sketchUrl
-        throw new Error("Missing required fields for sketch to render. Ensure sketchUrl, aspectRatio, and outputSize are provided.");
+    if (!input.sketchUrl || !input.aspectRatio || !input.width || !input.height) {
+        throw new Error("Missing required fields for sketch to render. Ensure sketchUrl, aspectRatio, width, and height are provided.");
+    }
+    if (input.width <= 0 || input.height <= 0) {
+        throw new Error("Width and height must be positive integers.");
     }
     // Ensure sketchUrl is a valid URL (basic check)
     try {
@@ -32,10 +35,14 @@ export async function handleSketchToRender(input: SketchToRenderInput): Promise<
 export async function handleMoodboardRender(input: MoodboardRenderInput): Promise<MoodboardRenderOutput> {
   try {
     // Validate or sanitize input if necessary
-    // Optional fields like aspectRatio, outputSize, architecturalStyle are not strictly required here,
-    // but the AI flow might have its own defaults or requirements.
-    if (!input.image1Url || !input.image2Url) {
-        throw new Error("Missing required fields for moodboard render. Ensure image1Url and image2Url are provided.");
+    // Optional fields like aspectRatio, architecturalStyle are not strictly required here for the action's basic validation,
+    // as the Zod schema in the flow handles their optional nature.
+    // Width and height are now required by the schema, but we can check for positive values.
+    if (!input.image1Url || !input.image2Url || !input.width || !input.height) {
+        throw new Error("Missing required fields for moodboard render. Ensure image URLs, width, and height are provided.");
+    }
+    if (input.width <= 0 || input.height <= 0) {
+        throw new Error("Width and height must be positive integers for moodboard render.");
     }
     // Ensure URLs are valid (basic check)
     try {
@@ -55,9 +62,14 @@ export async function handleMoodboardRender(input: MoodboardRenderInput): Promis
 
 export async function handleTextToRender(input: TextToRenderInput): Promise<TextToRenderOutput> {
   try {
-    if (!input.textDescription) {
-        throw new Error("Missing text description for text to render.");
+    // Validate required fields. aspectRatio and architecturalStyle are optional in the Zod schema.
+    if (!input.textDescription || !input.width || !input.height) {
+        throw new Error("Missing required fields for text to render. Ensure textDescription, width, and height are provided.");
     }
+    if (input.width <= 0 || input.height <= 0) {
+        throw new Error("Width and height must be positive integers for text to render.");
+    }
+    // The Zod schema in the flow will handle further specific validations (e.g., int, positive for width/height).
     return await textToRender(input);
   } catch (error) {
     console.error("Error in handleTextToRender:", error);
