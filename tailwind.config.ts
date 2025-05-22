@@ -8,6 +8,10 @@ export default {
     "./src/app/**/*.{js,ts,jsx,tsx,mdx}",
   ],
   theme: {
+    container: {
+      center: true,
+      maxWidth: '1280px',
+    },
   	extend: {
   		colors: {
   			background: 'hsl(var(--background))',
