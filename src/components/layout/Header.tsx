@@ -8,7 +8,6 @@ const navLinks = [
   { href: "/sketch-to-render", label: "Sketch to Render", icon: PencilRuler },
   { href: "/moodboard-render", label: "Moodboard Render", icon: Combine },
   { href: "/text-to-render", label: "Text to Render", icon: PenTool },
-  { href: "/enhance-details", label: "Enhance Details", icon: Sparkles },
   { href: "/style-suggestion", label: "AI Style Suggestion", icon: ImageIcon }, // Changed icon to ImageIcon
   { href: "/pricing", label: "Pricing", icon: DollarSign },
   { href: "/about", label: "About", icon: Info },
