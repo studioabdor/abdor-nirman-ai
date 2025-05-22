@@ -7,7 +7,7 @@ import Image from "next/image";
 import { useState, type ChangeEvent } from "react";
 
 interface FileUploaderProps {
-  onFileUpload: (dataUri: string) => void;
+  onFileUpload: (file: File | null, dataUri: string | null) => void;
   id: string;
   label: string;
   accept?: string;
@@ -25,13 +25,13 @@ export default function FileUploader({ onFileUpload, id, label, accept = "image/
       reader.onloadend = () => {
         const dataUri = reader.result as string;
         setPreview(dataUri);
-        onFileUpload(dataUri);
+        onFileUpload(file, dataUri); // Pass both file and dataUri
       };
       reader.readAsDataURL(file);
     } else {
       setFileName(null);
       setPreview(null);
-      onFileUpload(""); // Clear if no file
+      onFileUpload(null, null); // Clear if no file
     }
   };
 

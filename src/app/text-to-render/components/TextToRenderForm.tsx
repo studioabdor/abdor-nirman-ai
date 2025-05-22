@@ -1,174 +1,296 @@
 "use client";
 
-import { useState } from 'react';
-import { useForm, Controller } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import * as z from 'zod';
-import Image from 'next/image';
+import React, { useState } from "react";
+import StyleSuggestionWidget from "@/app/style-suggestion/components/StyleSuggestionWidget";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import Image from "next/image";
+import { addGeneratedImage } from "@/lib/firestoreService";
+import { handleTextToRender } from "@/lib/actions"; // Assuming this is the correct action
 
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { Textarea } from '@/components/ui/textarea';
-import LoadingSpinner from '@/components/shared/LoadingSpinner';
-import { useToast } from '@/hooks/use-toast';
-import { handleTextToRender } from '@/lib/actions';
-import { ASPECT_RATIOS, OUTPUT_SIZES, ARCHITECTURAL_STYLES } from '@/lib/constants';
+// Placeholder for LoadingSpinner, replace with actual component if available
+// For now, using a simple text loading indicator.
+// import LoadingSpinner from "@/components/shared/LoadingSpinner"; // Original comment
+import LoadingSpinner from "@/components/shared/LoadingSpinner"; // Correctly import the shared component
 
-const textToRenderSchema = z.object({
-  textDescription: z.string().min(10, "Description must be at least 10 characters."),
-  aspectRatio: z.string().optional(),
-  outputSize: z.string().optional(),
-  architecturalStyle: z.string().optional(),
-});
+const architecturalStyleOptions = [
+  "Modern",
+  "Minimalist",
+  "Brutalist",
+  "Classical",
+  "Art Deco",
+  "Contemporary",
+  "Futuristic",
+  "Industrial",
+  "Scandinavian",
+  "Bohemian",
+];
 
-type TextToRenderFormValues = z.infer<typeof textToRenderSchema>;
-
-export default function TextToRenderForm() {
-  const [isLoading, setIsLoading] = useState(false);
+const TextToRenderForm: React.FC = () => {
+  const [textDescription, setTextDescription] = useState<string>("");
+  const [aspectRatio, setAspectRatio] = useState<string>("16:9");
+  const [outputSize, setOutputSize] = useState<string>("1024x576"); // Default to a 16:9 size
+  const [architecturalStyle, setArchitecturalStyle] = useState<string>(architecturalStyleOptions[0]);
   const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null);
-  const { toast } = useToast();
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const form = useForm<TextToRenderFormValues>({
-    resolver: zodResolver(textToRenderSchema),
-    defaultValues: {
-      textDescription: "",
-      aspectRatio: ASPECT_RATIOS[0],
-      outputSize: OUTPUT_SIZES[0],
-      architecturalStyle: ARCHITECTURAL_STYLES[0],
-    },
-  });
+  // --- Style Suggestion Integration ---
+  const [showStyleAdvisor, setShowStyleAdvisor] = useState<boolean>(false);
 
-  const onSubmit = async (data: TextToRenderFormValues) => {
+  const handleApplySuggestionInForm = (suggestion: {
+    style?: string;
+    enhancements?: string;
+    parameters?: Record<string, any>;
+  }) => {
+    console.log("Applying suggestion to TextToRenderForm:", suggestion);
+    if (suggestion.style) {
+      // Check if the suggested style is one of the predefined options
+      const matchedStyle = architecturalStyleOptions.find(
+        (opt) => opt.toLowerCase() === suggestion.style?.toLowerCase()
+      );
+      if (matchedStyle) {
+        setArchitecturalStyle(matchedStyle);
+      } else {
+        // If not a direct match, prepend/append to description or handle as new style
+        setTextDescription(prev => `${prev} (Suggested style: ${suggestion.style})`.trim());
+      }
+    }
+    if (suggestion.enhancements) {
+      // Append enhancements to the text description
+      setTextDescription(prev => `${prev} ${suggestion.enhancements}`.trim());
+    }
+    if (suggestion.parameters) {
+      // Example: If AI suggests specific aspect ratio
+      if (suggestion.parameters.aspectRatio && typeof suggestion.parameters.aspectRatio === 'string') {
+        // Basic validation, could be more robust
+        if (["16:9", "1:1", "9:16", "4:3", "3:2"].includes(suggestion.parameters.aspectRatio)) {
+            setAspectRatio(suggestion.parameters.aspectRatio);
+        }
+      }
+      // Add more parameter handling as needed
+    }
+    setShowStyleAdvisor(false); // Close advisor after applying
+    alert("Suggestion applied to form fields (style and/or description updated).");
+  };
+  // --- End Style Suggestion Integration ---
+
+
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
     setIsLoading(true);
-    setGeneratedImageUrl(null);
+    setError(null);
+    setGeneratedImageUrl(null); // Clear previous image
+
+    if (!textDescription.trim()) {
+      setError("Please enter a description for your render.");
+      setIsLoading(false);
+      return;
+    }
+
+    const userId = "test-user-text-to-render"; // Placeholder for actual user ID
+
+    const aiInput = {
+      textDescription,
+      aspectRatio,
+      outputSize,
+      architecturalStyle,
+      // The backend `handleTextToRender` action and the `textToRender` AI flow
+      // will be responsible for mapping these fields to the specific AI model's requirements.
+      // For example, `textDescription` might become `prompt`.
+    };
+
     try {
-      const result = await handleTextToRender(data);
-      setGeneratedImageUrl(result.imageUrl);
-      toast({ title: "Success!", description: "Image generated from text." });
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
-      toast({ variant: "destructive", title: "Error", description: errorMessage });
+      console.log("Calling AI flow (handleTextToRender) with input:", aiInput);
+      const aiResult = await handleTextToRender(aiInput);
+
+      // MOCK AI RESULT - Remove this block when `handleTextToRender` is fully implemented
+      // await new Promise(resolve => setTimeout(resolve, 2500)); 
+      // const mockGeneratedImage = `https://picsum.photos/seed/${Math.random()}/${outputSize.split('x')[0]}/${outputSize.split('x')[1]}?random&description=${encodeURIComponent(textDescription)}`;
+      // const aiResult = { imageUrl: mockGeneratedImage, error: null }; 
+      // MOCK END
+
+      if (aiResult.error || !aiResult.imageUrl) {
+        throw new Error(aiResult.error || "AI processing failed to return an image URL.");
+      }
+      
+      const aiGeneratedImageUrl = aiResult.imageUrl;
+
+      try {
+        await addGeneratedImage(userId, {
+          type: "text-to-image",
+          prompt: textDescription, // Save the original text description as prompt
+          generatedImageUrl: aiGeneratedImageUrl,
+          parameters: {
+            aspectRatio,
+            outputSize,
+            architecturalStyle,
+          },
+        });
+      } catch (firestoreError) {
+        console.error("Error saving to Firestore:", firestoreError);
+        setError(
+          "Image generated successfully, but failed to save to your gallery. You can try saving it manually."
+        );
+        // Don't stop, image is generated. The user can see it.
+      }
+
+      setGeneratedImageUrl(aiGeneratedImageUrl);
+
+    } catch (err: any) {
+      console.error("Text to Render process error:", err);
+      setError(err.message || "An unexpected error occurred during the text to render process.");
     } finally {
       setIsLoading(false);
     }
   };
 
+  // Dynamically parse width and height for the Image component
+  const [imgWidth, imgHeight] = outputSize.split("x").map(Number);
+
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
-      <Card className="bg-card/80">
-        <CardHeader>
-          <CardTitle className="text-xl">Image Generation Options</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-              <FormField
-                control={form.control}
-                name="textDescription"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Text Description</FormLabel>
-                    <FormControl>
-                      <Textarea
-                        placeholder="e.g., A futuristic skyscraper with flowing organic lines, at sunset..."
-                        className="min-h-[120px]"
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+    <div className="max-w-4xl mx-auto p-4 space-y-6"> {/* Increased max-width for potential widget */}
+      <h1 className="text-3xl font-bold text-center">Text to Render</h1>
+      
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <form onSubmit={handleSubmit} className="space-y-6 bg-card p-6 rounded-lg shadow md:col-span-2">
+          <div>
+            <Label htmlFor="text-description" className="block text-sm font-medium mb-1">
+              Describe Your Vision
+            </Label>
+          <Textarea
+            id="text-description"
+            value={textDescription}
+            onChange={(e) => setTextDescription(e.target.value)}
+            placeholder="e.g., A bright, modern living room with large windows and a view of the city skyline, featuring minimalist furniture and indoor plants."
+            rows={5}
+            className="w-full"
+            disabled={isLoading}
+          />
+        </div>
 
-              <FormField
-                control={form.control}
-                name="aspectRatio"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Aspect Ratio (Optional)</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl>
-                        <SelectTrigger><SelectValue placeholder="Select aspect ratio" /></SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {ASPECT_RATIOS.map((ratio) => (
-                          <SelectItem key={ratio} value={ratio}>{ratio}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <Label htmlFor="architectural-style" className="block text-sm font-medium mb-1">Architectural Style:</Label>
+            <Select value={architecturalStyle} onValueChange={setArchitecturalStyle} disabled={isLoading}>
+              <SelectTrigger id="architectural-style">
+                <SelectValue placeholder="Select style" />
+              </SelectTrigger>
+              <SelectContent>
+                {architecturalStyleOptions.map(style => (
+                  <SelectItem key={style} value={style}>{style}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label htmlFor="aspect-ratio" className="block text-sm font-medium mb-1">Aspect Ratio:</Label>
+            <Select value={aspectRatio} onValueChange={setAspectRatio} disabled={isLoading}>
+              <SelectTrigger id="aspect-ratio">
+                <SelectValue placeholder="Select aspect ratio" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="16:9">16:9 (Widescreen)</SelectItem>
+                <SelectItem value="1:1">1:1 (Square)</SelectItem>
+                <SelectItem value="9:16">9:16 (Portrait)</SelectItem>
+                <SelectItem value="4:3">4:3 (Standard)</SelectItem>
+                <SelectItem value="3:2">3:2 (Photography)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        
+        <div>
+            <Label htmlFor="output-size" className="block text-sm font-medium mb-1">Output Size:</Label>
+            <Select value={outputSize} onValueChange={setOutputSize} disabled={isLoading}>
+              <SelectTrigger id="output-size">
+                <SelectValue placeholder="Select output size" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="1024x576">1024x576 (16:9)</SelectItem>
+                <SelectItem value="1024x1024">1024x1024 (1:1)</SelectItem>
+                <SelectItem value="576x1024">576x1024 (9:16)</SelectItem>
+                <SelectItem value="1024x768">1024x768 (4:3)</SelectItem>
+                <SelectItem value="1024x680">1024x680 (3:2)</SelectItem>
+                <SelectItem value="2048x1152">2048x1152 (16:9 HD)</SelectItem>
+                <SelectItem value="2048x2048">2048x2048 (1:1 HD)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
 
-              <FormField
-                control={form.control}
-                name="outputSize"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Output Size (Optional)</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl>
-                        <SelectTrigger><SelectValue placeholder="Select output size" /></SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {OUTPUT_SIZES.map((size) => (
-                          <SelectItem key={size} value={size}>{size}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+          <Button type="submit" className="w-full" disabled={isLoading || !textDescription.trim()}>
+            {isLoading ? "Generating Your Image..." : "Generate Image"}
+          </Button>
+        </form>
 
-              <FormField
-                control={form.control}
-                name="architecturalStyle"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Architectural Style (Optional)</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl>
-                        <SelectTrigger><SelectValue placeholder="Select style" /></SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {ARCHITECTURAL_STYLES.map((style) => (
-                          <SelectItem key={style} value={style}>{style}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+        {/* Style Suggestion Widget Area */}
+        <div className="md:col-span-1 space-y-4">
+            <Button 
+                variant="outline" 
+                onClick={() => setShowStyleAdvisor(!showStyleAdvisor)}
+                className="w-full"
+            >
+                {showStyleAdvisor ? "Hide" : "Show"} AI Style Advisor
+            </Button>
+            {showStyleAdvisor && (
+                <StyleSuggestionWidget
+                    currentTextPrompt={textDescription}
+                    onApplySuggestion={handleApplySuggestionInForm}
+                />
+            )}
+        </div>
+      </div>
 
-              <Button type="submit" className="w-full" disabled={isLoading}>
-                {isLoading ? <LoadingSpinner size="sm" /> : "Generate Image"}
-              </Button>
-            </form>
-          </Form>
-        </CardContent>
-      </Card>
 
-      <Card className="bg-card/80 min-h-[300px] flex items-center justify-center">
-        <CardHeader>
-          <CardTitle className="text-xl text-center">Generated Image</CardTitle>
-        </CardHeader>
-        <CardContent className="w-full">
-          {isLoading && <LoadingSpinner />}
-          {generatedImageUrl && !isLoading && (
-             <div className="mt-4 relative aspect-video w-full max-w-md mx-auto rounded-lg overflow-hidden shadow-lg">
-              <Image src={generatedImageUrl} alt="Generated from text" layout="fill" objectFit="contain" data-ai-hint="AI generated image" />
-            </div>
-          )}
-          {!isLoading && !generatedImageUrl && (
-            <p className="text-center text-muted-foreground">Your generated image will appear here.</p>
-          )}
-        </CardContent>
-      </Card>
+      {/* Results Area (moved outside the form but within the main div) */}
+      {isLoading && (
+        <div className="text-center py-4">
+          <LoadingSpinner size="lg" /> {/* Use the imported graphical spinner */}
+          <p className="text-muted-foreground mt-2">Please wait, this may take a moment.</p>
+        </div>
+      )}
+      
+      {error && (
+        <div className="bg-destructive/10 border border-destructive text-destructive p-4 rounded-md">
+          <h3 className="font-semibold">Error</h3>
+          <p>{error}</p>
+        </div>
+      )}
+      
+      {generatedImageUrl && !isLoading && (
+        <div className="mt-8 p-4 border rounded-lg shadow bg-card">
+          <h3 className="text-2xl font-semibold mb-4 text-center">Your Generated Image:</h3>
+          <div className="flex justify-center">
+            <Image
+              src={generatedImageUrl}
+              alt="Generated from text description"
+              width={imgWidth || 1024} 
+              height={imgHeight || 576}
+              className="rounded-md border-2 border-muted"
+              priority 
+            />
+          </div>
+          <div className="mt-4 text-center">
+            <Button variant="outline" onClick={() => window.open(generatedImageUrl, '_blank')}>
+              Open Full Size
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
-}
+};
+
+// Need to import StyleSuggestionWidget at the top of the file
+// import StyleSuggestionWidget from "@/app/style-suggestion/components/StyleSuggestionWidget";
+// This comment indicates where the import should be. The actual tool call will add it.
+
+export default TextToRenderForm;

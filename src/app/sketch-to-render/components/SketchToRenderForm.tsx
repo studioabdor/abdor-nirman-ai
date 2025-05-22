@@ -1,149 +1,226 @@
 "use client";
 
-import { useState } from 'react';
-import { useForm, Controller } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import * as z from 'zod';
-import Image from 'next/image';
+import React, { useState } from "react";
+import FileUploader from "@/components/shared/FileUploader";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import Image from "next/image";
+import { uploadFile, deleteFileByPath } from "@/lib/storageService";
+import { addGeneratedImage } from "@/lib/firestoreService";
+// import { handleSketchToRender } from "@/lib/actions"; // This will be used when actions.ts is updated
 
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import FileUploader from '@/components/shared/FileUploader';
-import LoadingSpinner from '@/components/shared/LoadingSpinner';
-import { useToast } from '@/hooks/use-toast';
-import { handleSketchToRender } from '@/lib/actions';
-import { ASPECT_RATIOS, OUTPUT_SIZES } from '@/lib/constants';
+// Placeholder for LoadingSpinner, replace with actual component if available
+// For now, using a simple text loading indicator.
+// import LoadingSpinner from "@/components/shared/LoadingSpinner"; // Original comment
+import LoadingSpinner from "@/components/shared/LoadingSpinner"; // Correctly import the shared component
 
-const sketchToRenderSchema = z.object({
-  sketchDataUri: z.string().min(1, "Sketch image is required."),
-  aspectRatio: z.string().min(1, "Aspect ratio is required."),
-  outputSize: z.string().min(1, "Output size is required."),
-});
 
-type SketchToRenderFormValues = z.infer<typeof sketchToRenderSchema>;
+const SketchToRenderForm: React.FC = () => {
+  const [sketchFile, setSketchFile] = useState<File | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [sketchPreviewDataUri, setSketchPreviewDataUri] = useState<string | null>(null); // Kept for potential UI preview if needed, though FileUploader handles its own.
+  const [aspectRatio, setAspectRatio] = useState<string>("16:9");
+  const [outputSize, setOutputSize] = useState<string>("1024x576"); // Default to a 16:9 size
+  const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
 
-export default function SketchToRenderForm() {
-  const [isLoading, setIsLoading] = useState(false);
-  const [renderedImageUrl, setRenderedImageUrl] = useState<string | null>(null);
-  const { toast } = useToast();
+  const handleFileUpdate = (file: File | null, dataUri: string | null) => {
+    setSketchFile(file);
+    setSketchPreviewDataUri(dataUri); // Store data URI if needed for other previews, though FileUploader handles its own
+    setGeneratedImageUrl(null); // Clear previous image if a new file is uploaded
+    setError(null); // Clear previous errors
+  };
 
-  const form = useForm<SketchToRenderFormValues>({
-    resolver: zodResolver(sketchToRenderSchema),
-    defaultValues: {
-      sketchDataUri: "",
-      aspectRatio: ASPECT_RATIOS[0],
-      outputSize: OUTPUT_SIZES[0],
-    },
-  });
-
-  const onSubmit = async (data: SketchToRenderFormValues) => {
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
     setIsLoading(true);
-    setRenderedImageUrl(null);
+    setError(null);
+    setGeneratedImageUrl(null); // Clear previous image
+
+    if (!sketchFile) {
+      setError("Please upload a sketch.");
+      setIsLoading(false);
+      return;
+    }
+
+    const userId = "test-user-sketch-to-render"; // Placeholder for actual user ID
+    let uploadedSketchPath: string | null = null;
+
     try {
-      const result = await handleSketchToRender(data);
-      setRenderedImageUrl(result.renderDataUri);
-      toast({ title: "Success!", description: "Your sketch has been rendered." });
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
-      toast({ variant: "destructive", title: "Error", description: errorMessage });
-      console.error("Sketch rendering error:", error);
+      // 1. Upload sketch to Firebase Storage
+      const { downloadURL: uploadedSketchUrl, filePath } = await uploadFile(
+        userId,
+        sketchFile,
+        "sketches"
+      );
+      uploadedSketchPath = filePath;
+
+      // 2. Call AI Flow (Action)
+      //    This section assumes `handleSketchToRender` in `src/lib/actions.ts`
+      //    has been updated to accept `sketchUrl` instead of `sketchDataUri`.
+      //    And that it can be called client-side, or is wrapped appropriately.
+      const aiInput = {
+        sketchUrl: uploadedSketchUrl,
+        aspectRatio,
+        outputSize,
+      };
+      console.log("Calling AI flow with input:", aiInput);
+
+      // MOCK AI RESULT (replace with actual call to handleSketchToRender)
+      // const aiResult = await handleSketchToRender(aiInput);
+      await new Promise(resolve => setTimeout(resolve, 2500)); // Simulate AI processing time
+      const mockGeneratedImage = `https://picsum.photos/seed/${Math.random()}/${outputSize.split('x')[0]}/${outputSize.split('x')[1]}`;
+      const aiResult = { imageUrl: mockGeneratedImage, error: null }; // Mock success
+      // const aiResult = { imageUrl: null, error: "Mock AI processing failed." }; // Mock failure
+      // MOCK END
+
+      if (aiResult.error || !aiResult.imageUrl) {
+        throw new Error(aiResult.error || "AI processing failed to return an image URL.");
+      }
+      
+      const aiGeneratedImageUrl = aiResult.imageUrl;
+
+      // 3. Save image metadata to Firestore
+      try {
+        await addGeneratedImage(userId, {
+          type: "sketch-to-image",
+          originalImageUrl: uploadedSketchUrl, // URL of the uploaded sketch
+          generatedImageUrl: aiGeneratedImageUrl, // URL of the AI-generated image
+          parameters: {
+            aspectRatio,
+            outputSize,
+            originalSketchPath: uploadedSketchPath, // Path in storage for reference/cleanup
+          },
+        });
+      } catch (firestoreError) {
+        console.error("Error saving to Firestore:", firestoreError);
+        // Non-critical error, image was generated. Set error to inform user.
+        setError(
+          "Image generated successfully, but failed to save to your gallery. Please try saving it manually."
+        );
+      }
+
+      setGeneratedImageUrl(aiGeneratedImageUrl);
+
+    } catch (err: any) {
+      console.error("Sketch to Render process error:", err);
+      setError(err.message || "An unexpected error occurred during the sketch to render process.");
+      // If an error occurred after uploading the sketch, attempt to clean it up
+      if (uploadedSketchPath) {
+        try {
+          await deleteFileByPath(uploadedSketchPath);
+          console.log("Cleaned up uploaded sketch due to error:", uploadedSketchPath);
+        } catch (cleanupError)_ {
+          console.error("Failed to clean up sketch after error:", cleanupError);
+          // Add to error or log, but primary error is already set
+        }
+      }
     } finally {
       setIsLoading(false);
     }
   };
 
+  // Dynamically parse width and height for the Image component
+  const [imgWidth, imgHeight] = outputSize.split("x").map(Number);
+
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
-      <Card className="bg-card/80">
-        <CardHeader>
-          <CardTitle className="text-xl">Rendering Options</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-              <FormField
-                control={form.control}
-                name="sketchDataUri"
-                render={({ field }) => (
-                  <FormItem>
-                    <FileUploader
-                      id="sketchUpload"
-                      label="Upload Sketch"
-                      onFileUpload={(dataUri) => field.onChange(dataUri)}
-                    />
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+    <div className="max-w-2xl mx-auto p-4 space-y-6">
+      <h1 className="text-3xl font-bold text-center">Sketch to Render</h1>
+      <form onSubmit={handleSubmit} className="space-y-6 bg-card p-6 rounded-lg shadow">
+        <FileUploader
+          onFileUpload={handleFileUpdate}
+          id="sketch-image-upload"
+          label="Upload Your Sketch"
+          accept="image/*"
+        />
 
-              <FormField
-                control={form.control}
-                name="aspectRatio"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Aspect Ratio</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl>
-                        <SelectTrigger><SelectValue placeholder="Select aspect ratio" /></SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {ASPECT_RATIOS.map((ratio) => (
-                          <SelectItem key={ratio} value={ratio}>{ratio}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <Label htmlFor="aspect-ratio" className="block text-sm font-medium mb-1">Aspect Ratio:</Label>
+            <Select value={aspectRatio} onValueChange={setAspectRatio} disabled={isLoading}>
+              <SelectTrigger id="aspect-ratio">
+                <SelectValue placeholder="Select aspect ratio" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="16:9">16:9 (Widescreen)</SelectItem>
+                <SelectItem value="1:1">1:1 (Square)</SelectItem>
+                <SelectItem value="9:16">9:16 (Portrait)</SelectItem>
+                <SelectItem value="4:3">4:3 (Standard)</SelectItem>
+                <SelectItem value="3:4">3:4 (Tall)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
 
-              <FormField
-                control={form.control}
-                name="outputSize"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Output Size</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl>
-                        <SelectTrigger><SelectValue placeholder="Select output size" /></SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {OUTPUT_SIZES.map((size) => (
-                          <SelectItem key={size} value={size}>{size}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+          <div>
+            <Label htmlFor="output-size" className="block text-sm font-medium mb-1">Output Size:</Label>
+            <Select value={outputSize} onValueChange={setOutputSize} disabled={isLoading}>
+              <SelectTrigger id="output-size">
+                <SelectValue placeholder="Select output size" />
+              </SelectTrigger>
+              <SelectContent>
+                {/* These should ideally be filtered/updated based on aspect ratio */}
+                <SelectItem value="1024x576">1024x576 (16:9)</SelectItem>
+                <SelectItem value="1024x1024">1024x1024 (1:1)</SelectItem>
+                <SelectItem value="576x1024">576x1024 (9:16)</SelectItem>
+                <SelectItem value="1024x768">1024x768 (4:3)</SelectItem>
+                <SelectItem value="768x1024">768x1024 (3:4)</SelectItem>
+                <SelectItem value="2048x1152">2048x1152 (16:9 HD)</SelectItem>
+                <SelectItem value="2048x2048">2048x2048 (1:1 HD)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
 
-              <Button type="submit" className="w-full" disabled={isLoading}>
-                {isLoading ? <LoadingSpinner size="sm" /> : "Render Sketch"}
-              </Button>
-            </form>
-          </Form>
-        </CardContent>
-      </Card>
+        <Button type="submit" className="w-full" disabled={isLoading || !sketchFile}>
+          {isLoading ? "Generating Your Image..." : "Render Sketch"}
+        </Button>
+      </form>
 
-      <Card className="bg-card/80 min-h-[300px] flex items-center justify-center">
-        <CardHeader>
-          <CardTitle className="text-xl text-center">Generated Image</CardTitle>
-        </CardHeader>
-        <CardContent className="w-full">
-          {isLoading && <LoadingSpinner />}
-          {renderedImageUrl && !isLoading && (
-            <div className="mt-4 relative aspect-video w-full max-w-md mx-auto rounded-lg overflow-hidden shadow-lg">
-              <Image src={renderedImageUrl} alt="Rendered Sketch" layout="fill" objectFit="contain" data-ai-hint="rendered sketch" />
-            </div>
-          )}
-          {!isLoading && !renderedImageUrl && (
-            <p className="text-center text-muted-foreground">Your rendered image will appear here.</p>
-          )}
-        </CardContent>
-      </Card>
+      {isLoading && (
+        <div className="text-center py-4">
+          <LoadingSpinner size="lg" /> {/* Use the imported graphical spinner, optionally specify size */}
+          <p className="text-muted-foreground mt-2">Please wait, this may take a moment.</p>
+        </div>
+      )}
+      
+      {error && (
+        <div className="bg-destructive/10 border border-destructive text-destructive p-4 rounded-md">
+          <h3 className="font-semibold">Error</h3>
+          <p>{error}</p>
+        </div>
+      )}
+      
+      {generatedImageUrl && !isLoading && (
+        <div className="mt-8 p-4 border rounded-lg shadow bg-card">
+          <h3 className="text-2xl font-semibold mb-4 text-center">Your Generated Image:</h3>
+          <div className="flex justify-center">
+            <Image
+              src={generatedImageUrl}
+              alt="Generated from sketch"
+              width={imgWidth || 1024} 
+              height={imgHeight || 576}
+              className="rounded-md border-2 border-muted"
+              priority // Prioritize loading of the generated image
+            />
+          </div>
+          <div className="mt-4 text-center">
+            <Button variant="outline" onClick={() => window.open(generatedImageUrl, '_blank')}>
+              Open Full Size
+            </Button>
+            {/* Add download button or other actions if needed */}
+          </div>
+        </div>
+      )}
     </div>
   );
-}
+};
+
+export default SketchToRenderForm;
