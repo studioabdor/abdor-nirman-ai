@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VisionCraft</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <div class="logo">VisionCraft</div>
+        <nav>
+            <ul>
+                <li><a href="#">Generate</a></li>
+                <li><a href="#">Gallery</a></li>
+                <li><a href="#">Styles</a></li>
+                <li><a href="#">Profile</a></li>
+                <li><a href="#">Settings</a></li>
+            </ul>
+        </nav>
+        <button class="btn btn-primary">Generate Now</button>
+        <div id="mode-toggle-button" class="mode-toggle">☀️</div>
+        <div class="user-avatar">User Profile Avatar</div>
+        <div class="hamburger-menu">&#9776;</div>
+    </header>
+
+    <main>
+        <section id="image-generation-input">
+            <h2>Image Generation Input</h2>
+            <div class="prompt-input-area">
+                <span class="prompt-icon">🪄</span>
+                <input type="text" id="text-prompt-input" placeholder="Describe your image...">
+            </div>
+        </section>
+
+        <section id="style-selector">
+            <h2 style="text-align: center; margin-bottom: 24px;">Choose a Style</h2>
+            <div class="style-selector-grid">
+                <div class="style-card">
+                    <div class="style-card-preview"></div>
+                    <p class="style-card-label">Cyberpunk</p>
+                </div>
+                <div class="style-card">
+                    <div class="style-card-preview"></div>
+                    <p class="style-card-label">Watercolor</p>
+                </div>
+                <div class="style-card">
+                    <div class="style-card-preview"></div>
+                    <p class="style-card-label">Minimalist</p>
+                </div>
+                <div class="style-card">
+                    <div class="style-card-preview"></div>
+                    <p class="style-card-label">Fantasy Art</p>
+                </div>
+                <div class="style-card">
+                    <div class="style-card-preview"></div>
+                    <p class="style-card-label">3D Render</p>
+                </div>
+                <div class="style-card">
+                    <div class="style-card-preview"></div>
+                    <p class="style-card-label">Retro Comic</p>
+                </div>
+            </div>
+        </section>
+
+        <section id="preview-pane">
+            <h2 style="text-align: center; margin-bottom: 24px;">Image Preview</h2>
+            <div class="preview-canvas-container">
+                <div class="preview-canvas">
+                    <p>Your generated image will appear here.</p>
+                </div>
+            </div>
+        </section>
+
+        <section id="gallery">
+            <h2>Community Gallery</h2>
+            <!-- Placeholder for gallery items -->
+        </section>
+    </main>
+
+    <footer>
+        <div class="logo-tagline">
+            <div class="logo">VisionCraft</div>
+            <p>Your tagline here</p>
+        </div>
+        <nav class="footer-links">
+            <ul>
+                <li><a href="#">About</a></li>
+                <li><a href="#">Contact</a></li>
+                <li><a href="#">FAQ</a></li>
+                <li><a href="#">Terms</a></li>
+                <li><a href="#">Privacy</a></li>
+            </ul>
+        </nav>
+        <div class="social-media-icons">
+            <a href="#">X</a>
+            <a href="#">IG</a>
+            <a href="#">GH</a>
+        </div>
+        <p class="copyright">&copy; 2023 VisionCraft. All rights reserved.</p>
+    </footer>
+    <script src="script.js"></script>
+</body>
+</html>
