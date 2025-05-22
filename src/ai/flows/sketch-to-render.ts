@@ -51,22 +51,25 @@ const sketchToRenderFlow = ai.defineFlow(
   },
   async input => {
     const replicate = new Replicate();
-
     const replicateInput = {
       image: input.sketchDataUri,
-      scale: 2,
-      prompt: "a photo of interior of a home, sofa, carpet, realistic,4k", // You might want to make this dynamic based on user input later
-      cn_lineart_strength: 1,
+      prompt: `Render a realistic image based on this sketch. Consider the aspect ratio: ${input.aspectRatio} and output size: ${input.outputSize}.`,
+      // Add other relevant parameters for the 'ai-forever/kandinsky-2.2' model as needed
     };
-
     try {
-      const output = await replicate.run("helios-infotech/sketch_to_image:feb7325e48612a443356bff3d0e03af21a42570f87bee6e8ea4f275f2bd3e6f9", { input: replicateInput });
-
-      // Assuming the output is a single string which is the image URL
-      return { renderDataUri: output as string };
+      const output = await replicate.run(
+        'ai-forever/kandinsky-2.2:ea1abb9c2e24a7f52bb852a826a7e8f43f80c57e379118893a3f82a34e1a3b11',
+        { input: replicateInput }
+      );
+      // The output of kandinsky-2.2 is an array of strings (image URLs). We'll take the first one.
+      if (Array.isArray(output) && output.length > 0) {
+        return { renderDataUri: output[0] as string };
+      } else {
+        throw new Error('Replicate model did not return a valid image.');
+      }
     } catch (error) {
-      console.error("Error running Replicate model:", error);
-      throw new Error("Failed to generate render from sketch.");
+      console.error('Error running Replicate model:', error);
+      throw new Error('Failed to generate render from sketch.');
     }
   }
 );
