@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { LoginForm } from "@/components/auth/LoginForm";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/hooks/use-toast";
 import { auth } from "@/lib/firebaseConfig"; // Import Firebase auth
 import { signInWithEmailAndPassword } from "firebase/auth";
 

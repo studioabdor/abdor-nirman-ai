@@ -2,8 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { SignupForm } from "@/components/auth/SignupForm";
-import { useToast } from "@/components/ui/use-toast";
+import { SignupForm } from "@/components/auth/SignupForm";import { useToast } from "@/hooks/use-toast";
 import { auth } from "@/lib/firebaseConfig"; // Import Firebase auth
 import { createUserWithEmailAndPassword } from "firebase/auth";
 

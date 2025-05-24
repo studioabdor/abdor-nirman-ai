@@ -2,7 +2,7 @@ import * as React from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SignupForm } from "@/components/auth/SignupForm";
 import { LoginForm } from "@/components/auth/LoginForm";
-import { useToast } from "@/components/ui/use-toast"; // Assuming useToast is for displaying messages
+import { useToast } from "@/hooks/use-toast"; // Assuming useToast is for displaying messages
 
 export default function AuthPage() {
   const [loading, setLoading] = React.useState(false);
