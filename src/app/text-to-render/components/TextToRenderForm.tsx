@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react'; // Added useEffect
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -12,9 +12,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Textarea } from '@/components/ui/textarea';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
-import { useToast } from '@/hooks/use-toast';
+import { useToast } from '@/hooks/use-toast'; // Corrected path for useToast
 import { handleTextToRender } from '@/lib/actions';
 import { ASPECT_RATIOS, OUTPUT_SIZES, ARCHITECTURAL_STYLES } from '@/lib/constants';
+import { useAuth } from '@/context/AuthContext'; // Import useAuth
 
 const textToRenderSchema = z.object({
   textDescription: z.string().min(10, "Description must be at least 10 characters."),
@@ -29,6 +30,7 @@ export default function TextToRenderForm() {
   const [isLoading, setIsLoading] = useState(false);
   const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null);
   const { toast } = useToast();
+  const { user, loading: authLoading } = useAuth(); // Get user and auth loading state
 
   const form = useForm<TextToRenderFormValues>({
     resolver: zodResolver(textToRenderSchema),
@@ -41,10 +43,20 @@ export default function TextToRenderForm() {
   });
 
   const onSubmit = async (data: TextToRenderFormValues) => {
+    if (authLoading) {
+      toast({ variant: "destructive", title: "Error", description: "Authentication state is loading. Please wait." });
+      return;
+    }
+    if (!user) {
+      toast({ variant: "destructive", title: "Error", description: "Please log in to generate images." });
+      return;
+    }
+
     setIsLoading(true);
     setGeneratedImageUrl(null);
     try {
-      const result = await handleTextToRender(data);
+      // Pass data and user.uid to the server action
+      const result = await handleTextToRender(data, user.uid);
       setGeneratedImageUrl(result.imageUrl);
       toast({ title: "Success!", description: "Image generated from text." });
     } catch (error) {
@@ -145,8 +157,12 @@ export default function TextToRenderForm() {
                 )}
               />
 
-              <Button type="submit" className="w-full" disabled={isLoading}>
-                {isLoading ? <LoadingSpinner size="sm" /> : "Generate Image"}
+              <Button 
+                type="submit" 
+                className="w-full" 
+                disabled={isLoading || authLoading || !user}
+              >
+                {isLoading ? <LoadingSpinner size="sm" /> : (authLoading ? "Authenticating..." : (!user ? "Login to Generate" : "Generate Image"))}
               </Button>
             </form>
           </Form>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from 'react';
-import { useForm, Controller } from 'react-hook-form';
+import { useForm } from 'react-hook-form'; // Controller is not explicitly used
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import Image from 'next/image';
@@ -15,6 +15,7 @@ import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import { useToast } from '@/hooks/use-toast';
 import { handleMoodboardRender } from '@/lib/actions';
 import { ASPECT_RATIOS, OUTPUT_SIZES, ARCHITECTURAL_STYLES } from '@/lib/constants';
+import { useAuth } from '@/context/AuthContext'; // Import useAuth
 
 const moodboardRenderSchema = z.object({
   image1DataUri: z.string().min(1, "First image is required."),
@@ -30,6 +31,7 @@ export default function MoodboardRenderForm() {
   const [isLoading, setIsLoading] = useState(false);
   const [mergedImageUrl, setMergedImageUrl] = useState<string | null>(null);
   const { toast } = useToast();
+  const { user, loading: authLoading } = useAuth(); // Get user and auth loading state
 
   const form = useForm<MoodboardRenderFormValues>({
     resolver: zodResolver(moodboardRenderSchema),
@@ -43,11 +45,21 @@ export default function MoodboardRenderForm() {
   });
 
   const onSubmit = async (data: MoodboardRenderFormValues) => {
+    if (authLoading) {
+      toast({ variant: "destructive", title: "Error", description: "Authentication state is loading. Please wait." });
+      return;
+    }
+    if (!user) {
+      toast({ variant: "destructive", title: "Error", description: "Please log in to merge images." });
+      return;
+    }
+
     setIsLoading(true);
     setMergedImageUrl(null);
     try {
-      const result = await handleMoodboardRender(data);
-      setMergedImageUrl(result.mergedImageDataUri);
+      const result = await handleMoodboardRender(data, user.uid); // Pass user.uid
+      // Ensure the key matches what's returned by the updated action (imageUrl)
+      setMergedImageUrl(result.imageUrl); 
       toast({ title: "Success!", description: "Images merged successfully." });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
@@ -159,8 +171,12 @@ export default function MoodboardRenderForm() {
                 )}
               />
 
-              <Button type="submit" className="w-full" disabled={isLoading}>
-                {isLoading ? <LoadingSpinner size="sm" /> : "Merge Images"}
+              <Button 
+                type="submit" 
+                className="w-full" 
+                disabled={isLoading || authLoading || !user}
+              >
+                {isLoading ? <LoadingSpinner size="sm" /> : (authLoading ? "Authenticating..." : (!user ? "Login to Merge" : "Merge Images"))}
               </Button>
             </form>
           </Form>

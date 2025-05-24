@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ArrowRight, Combine, ImageIcon, LayoutDashboard, PenTool, PencilRuler, Sparkles } from "lucide-react";
 import Link from "next/link";
+import ImageHistory from "@/components/dashboard/ImageHistory"; // Import ImageHistory
 
 const features = [
   {
@@ -83,6 +84,11 @@ export default function HomePage() {
             <li><span className="font-semibold">User-Friendly:</span> Intuitive interface designed for architects and designers.</li>
           </ul>
         </section>
+
+      {/* Image History Section */}
+      <section className="w-full max-w-5xl my-12">
+        <ImageHistory />
+      </section>
     </div>
   );
 }

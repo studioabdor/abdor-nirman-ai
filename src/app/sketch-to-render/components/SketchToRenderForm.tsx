@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from 'react';
-import { useForm, Controller } from 'react-hook-form';
+import { useForm } from 'react-hook-form'; // Controller is not explicitly used, can be removed if not needed later
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import Image from 'next/image';
@@ -15,6 +15,7 @@ import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import { useToast } from '@/hooks/use-toast';
 import { handleSketchToRender } from '@/lib/actions';
 import { ASPECT_RATIOS, OUTPUT_SIZES } from '@/lib/constants';
+import { useAuth } from '@/context/AuthContext'; // Import useAuth
 
 const sketchToRenderSchema = z.object({
   sketchDataUri: z.string().min(1, "Sketch image is required."),
@@ -28,6 +29,7 @@ export default function SketchToRenderForm() {
   const [isLoading, setIsLoading] = useState(false);
   const [renderedImageUrl, setRenderedImageUrl] = useState<string | null>(null);
   const { toast } = useToast();
+  const { user, loading: authLoading } = useAuth(); // Get user and auth loading state
 
   const form = useForm<SketchToRenderFormValues>({
     resolver: zodResolver(sketchToRenderSchema),
@@ -39,11 +41,21 @@ export default function SketchToRenderForm() {
   });
 
   const onSubmit = async (data: SketchToRenderFormValues) => {
+    if (authLoading) {
+      toast({ variant: "destructive", title: "Error", description: "Authentication state is loading. Please wait." });
+      return;
+    }
+    if (!user) {
+      toast({ variant: "destructive", title: "Error", description: "Please log in to render sketches." });
+      return;
+    }
+
     setIsLoading(true);
     setRenderedImageUrl(null);
     try {
-      const result = await handleSketchToRender(data);
-      setRenderedImageUrl(result.renderDataUri);
+      const result = await handleSketchToRender(data, user.uid); // Pass user.uid
+      // Ensure the key matches what's returned by the updated action (imageUrl)
+      setRenderedImageUrl(result.imageUrl); 
       toast({ title: "Success!", description: "Your sketch has been rendered." });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
@@ -120,8 +132,12 @@ export default function SketchToRenderForm() {
                 )}
               />
 
-              <Button type="submit" className="w-full" disabled={isLoading}>
-                {isLoading ? <LoadingSpinner size="sm" /> : "Render Sketch"}
+              <Button 
+                type="submit" 
+                className="w-full" 
+                disabled={isLoading || authLoading || !user}
+              >
+                {isLoading ? <LoadingSpinner size="sm" /> : (authLoading ? "Authenticating..." : (!user ? "Login to Render" : "Render Sketch"))}
               </Button>
             </form>
           </Form>
