@@ -8,7 +8,7 @@ import { useAuth } from '@/context/AuthContext'; // Import useAuth
 import { auth } from '@/lib/firebaseConfig'; // Import Firebase auth for signOut
 import { signOut as firebaseSignOut } from 'firebase/auth'; // Specific import for signOut
 import { Button } from '@/components/ui/button'; // Import Button for Login/Logout
-import { useToast } from '@/components/ui/use-toast'; // Import useToast
+import { useToast } from '@/hooks/use-toast'; // Import useToast
 
 const navLinks = [
   { href: "/sketch-to-render", label: "Sketch to Render", icon: PencilRuler },
